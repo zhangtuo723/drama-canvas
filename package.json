@@ -1,6 +1,6 @@
 {
   "name": "drama-canvas",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local image and video canvas controlled through a CLI and a Codex plugin",
   "type": "module",
   "bin": {
@@ -18,8 +18,8 @@
     "test": "node --test",
     "dev": "vite --host 127.0.0.1",
     "format": "prettier --write src web test package.json",
-    "prepack": "npm run build",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "@ffprobe-installer/ffprobe": "^2.1.2",

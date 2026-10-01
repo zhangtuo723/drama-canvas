@@ -26,17 +26,28 @@ node src/cli.js --project ./demo restart
 
 GitHub 源码、npm 发布、插件 marketplace 安装与官方目录提交见 [发布说明](https://github.com/zhangtuo723/drama-canvas/blob/main/docs/PUBLISHING.md)。
 
+无需先发布到 npm registry，用户或 agent 可以直接从 GitHub 安装（需要 Git 和 Node.js 22.12+）：
+
+```bash
+npm install --prefix "$HOME/.local/share/drama-canvas-cli" 'git+https://github.com/zhangtuo723/drama-canvas.git#main'
+"$HOME/.local/share/drama-canvas-cli/node_modules/.bin/drama-canvas" --version
+```
+
+安装时 `prepare` 自动构建画布前端。当前尚未发布到 npm registry，因此不要使用仅包名的 `npm install -g drama-canvas`。
+
+也可以从源码制作本地安装包：
+
 ```bash
 npm run build
 npm pack
-npm install -g ./drama-canvas-0.2.0.tgz
+npm install -g ./drama-canvas-0.2.1.tgz
 drama-canvas init ./我的画布
 drama-canvas --project ./我的画布 start
 ```
 
 这是本地安装包，尚未发布 npm。媒体处理使用 `sharp` 和按平台安装的 FFprobe，SQLite 使用 `better-sqlite3`；缺少相应预编译包的平台可能需要编译环境。
 
-插件目录为 `plugin/`，Skill 位于 `plugin/skills/drama-canvas/SKILL.md`。插件包不会自动安装 CLI。可在支持本地插件的 Codex 客户端加载该目录，也可以让 Codex 读取 Skill 后使用当前仓库的 `node src/cli.js`。
+插件目录为 `plugin/`，Skill 位于 `plugin/skills/drama-canvas/SKILL.md`。插件加载本身不会运行安装命令；agent 在首次执行画布任务时会检查 CLI，缺失时按 Skill 中的 GitHub 安装步骤处理。也可以使用当前源码仓库的 `node src/cli.js`。
 
 以下示例都以 `node src/cli.js --project ./demo` 指定工程；全局安装后可以替换为 `drama-canvas --project ./demo`。
 

@@ -22,3 +22,7 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm pack --dry-run --ignore-scripts
+      - name: Install the committed Git package in an isolated prefix
+        run: npm install --prefix "$RUNNER_TEMP/drama-git-install" "git+file://$GITHUB_WORKSPACE#${GITHUB_SHA}" --no-audit --no-fund
+      - name: Verify installed CLI and viewer assets
+        run: node scripts/verify-install.mjs "$RUNNER_TEMP/drama-git-install/node_modules/.bin/drama-canvas"

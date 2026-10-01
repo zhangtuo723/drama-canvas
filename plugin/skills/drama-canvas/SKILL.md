@@ -9,6 +9,19 @@ Use `drama-canvas`, or `node /absolute/repository/src/cli.js` in a source checko
 
 The browser is a media canvas; only image/video nodes and input-to-result dependency arrows are supported. Do not create text/group nodes or “下一步” sequence labels. Use separate available tools for generation: this CLI never calls a model or executes a dependency graph.
 
+## Ensure the CLI is available
+
+Before the first canvas operation, check `drama-canvas --version`. Use an existing source checkout when one is available. If the CLI is missing, install it as part of setting up the user's requested canvas task, using the public GitHub repository:
+
+```bash
+npm install --prefix "$HOME/.local/share/drama-canvas-cli" 'git+https://github.com/zhangtuo723/drama-canvas.git#main'
+"$HOME/.local/share/drama-canvas-cli/node_modules/.bin/drama-canvas" --version
+```
+
+This requires Git, Node.js 22.12+ and npm. It does not require the CLI to be published to the npm registry or the user to log in to npm. The package's `prepare` script builds the viewer during Git installation. Do not use `npm install -g drama-canvas` until the package has actually been published under that name. Do not disable lifecycle scripts: the viewer and native dependencies need them.
+
+On macOS/Linux, check both PATH and `$HOME/.local/share/drama-canvas-cli/node_modules/.bin/drama-canvas` before installing, and invoke the installed absolute path for subsequent commands. For other platforms use an equivalent writable tool directory. Prefer this non-global Git install: some npm 10 versions inherit global mode into the Git preparation subprocess and fail. If a global command is explicitly desired, first run `npm pack` for the Git URL without global mode, then `npm install -g` the returned local tarball. Do not use sudo or change shell startup files just to install this tool. Follow the host's execution permissions and report any real installation failure. Plugin loading itself does not perform installation; the agent runs this setup only when using the CLI for a requested task.
+
 ## Connect and inspect
 
 Use `status` to check the intended project, `init <dir>` to create one, and `start` to launch its background server. `start --port 4317` chooses another port if occupied; read the returned URL. `stop` and `restart` manage the project service. `serve` is an alternative foreground process. Do not terminate unrelated processes to free a port.
