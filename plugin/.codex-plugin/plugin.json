@@ -1,0 +1,9 @@
+{
+  "name": "drama-canvas",
+  "version": "0.2.0",
+  "description": "通过本地 CLI 管理图片、视频画布、生成依赖和历史版本。",
+  "author": {
+    "name": "Drama Canvas"
+  },
+  "skills": "./skills/"
+}

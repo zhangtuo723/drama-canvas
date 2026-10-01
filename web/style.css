@@ -1,0 +1,281 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans SC", sans-serif;
+  color: #384237;
+  background: #f6f7f3;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+button:focus-visible {
+  outline: 2px solid #6a805d;
+  outline-offset: 3px;
+}
+.viewer {
+  height: 100dvh;
+  position: relative;
+  overflow: hidden;
+}
+header {
+  position: absolute;
+  z-index: 5;
+  top: 20px;
+  left: 24px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  pointer-events: none;
+  background: #f6f7f3e8;
+  padding: 8px 12px;
+  border-radius: 8px;
+  max-width: calc(100% - 48px);
+}
+header strong {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #879080;
+  white-space: nowrap;
+}
+.connection i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b8aa86;
+}
+.connection .live {
+  background: #759268;
+}
+.card {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  border: 1px solid #dce2d6;
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: 0 3px 15px #35432c0a;
+  display: flex;
+  flex-direction: column;
+}
+.react-flow__node {
+  width: 300px;
+}
+.node-label {
+  padding: 10px 13px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.image-content {
+  display: block;
+  width: 100%;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  cursor: grab;
+  user-select: none;
+}
+.card img,
+.card video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #f0f1ec;
+  min-height: 0;
+}
+.card video {
+  flex: 1;
+}
+.placeholder {
+  padding: 65px 20px;
+  text-align: center;
+  font-size: 12px;
+  color: #9aa292;
+}
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+.react-flow__controls {
+  box-shadow: 0 2px 8px #00000008;
+  border: 1px solid #dfe4d7;
+  border-radius: 7px;
+  overflow: hidden;
+  bottom: 18px;
+  left: 10px;
+}
+.react-flow__controls-button {
+  background: white;
+  border-bottom: 1px solid #edf0e6;
+  fill: #687861;
+}
+.view-tools {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11px;
+  color: #8b9484;
+}
+.view-tools button {
+  border: 1px solid #dfe4d7;
+  background: #fff;
+  padding: 9px 13px;
+  border-radius: 7px;
+  color: #56684b;
+}
+.hint {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #939d8b;
+  font-size: 11px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.empty {
+  position: absolute;
+  top: 44%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  width: 90%;
+}
+.empty h1 {
+  font-size: 23px;
+  font-weight: 500;
+}
+.empty p {
+  font-size: 14px;
+  color: #7d8c74;
+}
+.empty small {
+  font-size: 12px;
+  color: #a0a795;
+}
+.error {
+  position: absolute;
+  top: 75px;
+  left: 24px;
+  background: #fff3ea;
+  padding: 12px 18px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+@media (max-width: 650px) {
+  .hint {
+    display: none;
+  }
+}
+
+.node-label {
+  cursor: grab;
+  user-select: none;
+}
+.react-flow__node.dragging .node-label {
+  cursor: grabbing;
+}
+.react-flow__node.selected .card {
+  outline: 2px solid #789262;
+  outline-offset: 3px;
+}
+@media (max-width: 1050px) {
+  .hint {
+    left: 66px;
+    transform: none;
+    bottom: 72px;
+    font-size: 10px;
+  }
+}
+
+.node-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 13px;
+}
+.node-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node-status {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  padding: 3px 5px;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 400;
+  color: #7c8875;
+  background: #f0f3ec;
+}
+.node-status.running {
+  color: #5e7f78;
+  background: #edf5f1;
+}
+.node-status.failed {
+  color: #a35c4c;
+  background: #fceee9;
+}
+.node-status.stale {
+  color: #997633;
+  background: #faf3df;
+}
+.history-icon {
+  font-size: 21px;
+  line-height: 1;
+  color: #687861;
+}
+.react-flow__controls-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.node-delete {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  padding: 0;
+  color: #899181;
+  font-size: 21px;
+  line-height: 1;
+}
+.node-delete:hover {
+  color: #a04d3b;
+  background: #fbeee9;
+}
+.react-flow__node.dragging .image-content {
+  cursor: grabbing;
+}
+.image-content img {
+  user-select: none;
+  -webkit-user-drag: none;
+}

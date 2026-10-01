@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "drama-canvas",
+  "version": "0.2.0",
+  "description": "Manage a local image and video canvas with generation dependencies through the Drama Canvas CLI. Requires the CLI to be installed separately."
+}
