@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { execFile } from "node:child_process";
@@ -12,29 +12,36 @@ import { arrange, freePosition } from "../src/layout.js";
 
 const exec = promisify(execFile);
 const cli =
-  (dir) =>
+  (dir, env = process.env) =>
   async (...args) =>
     JSON.parse(
       (
         await exec(
           process.execPath,
           [path.resolve("src/cli.js"), "--project", dir, ...args],
-          { timeout: 20000 },
+          { timeout: 20000, env },
         )
       ).stdout,
     );
 async function project(t, server = true) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "canvas-cli-upgrade-"));
+  const dir = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "canvas-cli-upgrade-")),
+  );
   const service = server ? await serve(dir, 0) : null;
+  const env = {
+    ...process.env,
+    DRAMA_CANVAS_RUNTIME_DIR: path.join(dir, "runtime"),
+  };
   t.after(async () => {
     if (service) {
       service.close();
       service.server.closeAllConnections();
       await new Promise((r) => service.server.close(r));
     }
+    if (!service) await cli(dir, env)("server", "stop").catch(() => {});
     await rm(dir, { recursive: true, force: true });
   });
-  return { dir, service, run: cli(dir) };
+  return { dir, service, run: cli(dir, env) };
 }
 async function picture(dir, name, background = "green") {
   const file = path.join(dir, name + ".png");
@@ -207,7 +214,7 @@ test("detached CLI lifecycle handles occupied ports, duplicate start, restart, s
   // Register this before assertions so a failed assertion cannot leave a server behind.
   t.after(async () => {
     try {
-      await run("stop");
+      await run("server", "stop");
     } catch {}
   });
   try {
@@ -220,7 +227,7 @@ test("detached CLI lifecycle handles occupied ports, duplicate start, restart, s
     assert.equal(again.alreadyRunning, true);
     await run("node", "add", "--id", "preserved");
     const next = await run("restart");
-    assert.notEqual(next.pid, first.pid);
+    assert.equal(next.pid, first.pid);
     assert.equal(next.url, first.url);
     assert.equal((await run("status")).ok, true);
     assert.equal((await run("stop")).stopped, true);
@@ -235,7 +242,7 @@ test("detached CLI lifecycle handles occupied ports, duplicate start, restart, s
     );
   } finally {
     try {
-      await run("stop");
+      await run("server", "stop");
     } catch {}
   }
 });

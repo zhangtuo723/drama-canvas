@@ -1,6 +1,6 @@
 {
   "name": "drama-canvas",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local image and video canvas controlled through a CLI and a Codex plugin",
   "type": "module",
   "bin": {
@@ -10,6 +10,7 @@
     "src",
     "dist",
     "plugin",
+    "docs",
     "README.md"
   ],
   "scripts": {
@@ -46,5 +47,9 @@
   "homepage": "https://github.com/zhangtuo723/drama-canvas#readme",
   "bugs": {
     "url": "https://github.com/zhangtuo723/drama-canvas/issues"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   }
 }

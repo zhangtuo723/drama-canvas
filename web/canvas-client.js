@@ -1,9 +1,27 @@
+// Keep every request inside the project selected by this browser tab. The
+// standalone viewer (and Node callers without location) still uses root URLs.
+export function canvasUrl(
+  url,
+  pathname = globalThis.location?.pathname || "/",
+) {
+  const prefix = pathname.match(/^(\/p\/[^/]+)(?:\/|$)/)?.[1] || "";
+  return prefix + (url.startsWith("/") ? url : "/" + url);
+}
+
+export function openCanvasEvents() {
+  return new EventSource(canvasUrl("/api/events"));
+}
+
 export async function requestJson(url, options = {}) {
-  const response = await fetch(url, { cache: "no-store", ...options });
+  const response = await fetch(canvasUrl(url), {
+    cache: "no-store",
+    ...options,
+  });
   const data = await response.json();
   if (!response.ok) {
     const error = new Error(data.error || "请求失败");
     error.status = response.status;
+    error.code = data.code;
     throw error;
   }
   return data;

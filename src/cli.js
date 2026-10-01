@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import path from "node:path";
-import {
-  readFileSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  closeSync,
-} from "node:fs";
-import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { setTimeout as delay } from "node:timers/promises";
+import { readFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { Store } from "./store.js";
-import { serve } from "./server.js";
+import { serveShared } from "./server.js";
+import { canonicalProject } from "./runtime.js";
+import {
+  request,
+  projectEndpoint,
+  projectHealth,
+  serverHealth,
+  startServer,
+  stopServer,
+  openProject,
+  stopProject,
+  listProjects,
+} from "./service-client.js";
 import { freePosition, arrange } from "./layout.js";
 import { queryState } from "./queries.js";
 const version = JSON.parse(
@@ -29,7 +32,7 @@ const cli = new Command()
   .exitOverride()
   .configureOutput({ outputError: () => {} });
 const out = (x) => console.log(JSON.stringify(x, null, 2));
-const directory = () => path.resolve(cli.opts().project);
+const directory = () => canonicalProject(cli.opts().project);
 const fail = (message, code = "INVALID_ARGUMENT") =>
   Object.assign(new Error(message), { code });
 const number = (value, name) => {
@@ -37,86 +40,35 @@ const number = (value, name) => {
   if (!Number.isFinite(n)) throw fail(name + "必须为有效数字");
   return n;
 };
-function endpoint() {
-  let ep;
-  try {
-    ep = JSON.parse(
-      readFileSync(path.join(directory(), ".server.json"), "utf8"),
-    );
-  } catch {
-    throw fail(
-      "画布服务未启动，请运行 drama-canvas start --project <目录>",
-      "SERVER_NOT_RUNNING",
-    );
-  }
-  let u;
-  try {
-    u = new URL(ep.url);
-  } catch {
-    throw fail("无效的本机服务地址", "INVALID_ENDPOINT");
-  }
-  if (
-    u.protocol !== "http:" ||
-    !["127.0.0.1", "localhost"].includes(u.hostname) ||
-    u.username ||
-    u.password ||
-    u.pathname !== "/" ||
-    u.search ||
-    u.hash
-  )
-    throw fail("无效的本机服务地址", "INVALID_ENDPOINT");
-  return ep;
-}
 async function api(
   route,
   body,
   timeout = number(cli.opts().timeout, "timeout"),
 ) {
-  const ep = endpoint();
-  if (!Number.isSafeInteger(timeout) || timeout <= 0)
-    throw fail("timeout必须大于0");
-  let r;
-  try {
-    r = await fetch(ep.url + route, {
-      method: body === undefined ? "GET" : "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Canvas-Token": ep.token,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(timeout),
-    });
-  } catch (e) {
-    throw fail(
-      e.name === "TimeoutError"
-        ? "请求超时，可使用 --timeout 增加等待时间"
-        : "无法连接画布服务，请运行 status 或 restart",
-      e.name === "TimeoutError" ? "REQUEST_TIMEOUT" : "SERVER_UNREACHABLE",
-    );
-  }
-  let data;
-  try {
-    data = await r.json();
-  } catch {
-    throw fail("服务返回了无效响应", "INVALID_RESPONSE");
-  }
-  if (!r.ok)
-    throw fail(
-      data.error || "请求失败",
-      data.code || (r.status === 409 ? "REVISION_CONFLICT" : "REQUEST_FAILED"),
-    );
-  return data;
+  return request(projectEndpoint(directory()), route, body, timeout);
 }
-async function health() {
-  try {
-    const h = await api("/api/health", undefined, 1000);
-    return h.ok && h.service === "drama-canvas" && h.project === directory()
-      ? h
-      : null;
-  } catch {
-    return null;
+// Read-only inspection stays available offline. Only commands that need the
+// running canvas open it automatically; status/stop never wake a service.
+cli.hook("preAction", async (_, command) => {
+  let top = command;
+  while (top.parent && top.parent !== cli) top = top.parent;
+  if (
+    [
+      "asset",
+      "edge",
+      "generation",
+      "apply",
+      "layout",
+      "view",
+      "undo",
+      "redo",
+      "restore",
+    ].includes(top.name()) ||
+    (top.name() === "node" && command.name() !== "get")
+  ) {
+    await openProject(directory());
   }
-}
+});
 function portNumber(value) {
   const n = number(value, "port");
   if (!Number.isInteger(n) || n < 0 || n > 65535)
@@ -134,6 +86,8 @@ function localState(query = {}) {
   }
 }
 async function state(query = {}) {
+  // A leftover port may now belong to another project. Never read its state.
+  if (!(await projectHealth(directory()))) return localState(query);
   try {
     return await api(
       "/api/state?" + new URLSearchParams(query),
@@ -141,7 +95,14 @@ async function state(query = {}) {
       5000,
     );
   } catch (e) {
-    if (["SERVER_NOT_RUNNING", "SERVER_UNREACHABLE"].includes(e.code))
+    if (
+      [
+        "SERVER_NOT_RUNNING",
+        "SERVER_UNREACHABLE",
+        "PROJECT_NOT_OPEN",
+        "PROJECT_CLOSED",
+      ].includes(e.code)
+    )
       return localState(query);
     throw e;
   }
@@ -176,110 +137,110 @@ cli.command("init [directory]").action((d) => {
 });
 cli
   .command("serve")
+  .description("前台运行共享服务，Ctrl+C 关闭所有已打开工程")
   .option("--port <number>", "端口；0自动选择", "4317")
   .option("--auto-port", "端口占用时自动选择其他端口")
+  .option("--no-project", "只启动共享服务，不打开当前工程")
   .action(async (o) => {
     let service;
     try {
-      service = await serve(directory(), portNumber(o.port));
+      service = await serveShared(portNumber(o.port));
     } catch (e) {
       if (e.code !== "EADDRINUSE" || !o.autoPort) throw e;
-      service = await serve(directory(), 0);
+      service = await serveShared(0);
     }
-    out({ url: service.url, project: service.store.dir, pid: process.pid });
     let stopping = false;
-    const stop = () => {
+    const shutdown = async () => {
       if (stopping) return;
       stopping = true;
-      service.close();
-      service.server.close(() => process.exit(0));
-      setTimeout(() => service.server.closeAllConnections(), 1000).unref();
+      await service.close();
     };
-    service.app.locals.shutdown = stop;
-    process.on("SIGINT", stop);
-    process.on("SIGTERM", stop);
-  });
-async function start(port = "4317") {
-  const live = await health();
-  if (live)
-    return { ok: true, alreadyRunning: true, ...live, url: endpoint().url };
-  mkdirSync(directory(), { recursive: true });
-  const log = path.join(directory(), ".server.log"),
-    fd = openSync(log, "a", 0o600);
-  const child = spawn(
-    process.execPath,
-    [
-      fileURLToPath(import.meta.url),
-      "--project",
-      directory(),
-      "serve",
-      "--port",
-      String(port),
-      "--auto-port",
-    ],
-    { detached: true, stdio: ["ignore", fd, fd] },
-  );
-  closeSync(fd);
-  child.unref();
-  let spawnError;
-  child.on("error", (e) => {
-    spawnError = e;
-  });
-  const deadline = Date.now() + 12000;
-  for (; Date.now() < deadline;) {
-    if (spawnError) throw fail(spawnError.message, "START_FAILED");
-    await delay(150);
-    const h = await health();
-    if (h) return { ok: true, url: endpoint().url, ...h, log };
-  }
-  throw fail("服务未能启动，请检查 " + log, "START_FAILED");
-}
-async function stop() {
-  const h = await health();
-  if (!h) return { ok: true, stopped: false };
-  const ep = endpoint();
-  await api("/api/shutdown", {});
-  for (let i = 0; i < 50; i++) {
-    await delay(100);
-    let current;
+    service.app.locals.shutdown = shutdown;
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
     try {
-      current = endpoint();
-    } catch {
-      return { ok: true, stopped: true };
+      const project = o.project ? await service.openProject(directory()) : null;
+      const { token, ...safeProject } = project || {};
+      out({
+        ok: true,
+        mode: "shared",
+        pid: process.pid,
+        serverUrl: service.url,
+        url: project?.url || service.url,
+        ...safeProject,
+      });
+    } catch (error) {
+      await shutdown();
+      throw error;
     }
-    if (current.pid !== ep.pid) return { ok: true, stopped: true };
-  }
-  throw fail("服务停止超时", "STOP_TIMEOUT");
-}
+  });
 cli
   .command("start")
-  .option("--port <number>", "首选端口；占用自动换端口", "4317")
-  .action(async (o) => out(await start(portNumber(o.port))));
-cli.command("stop").action(async () => out(await stop()));
+  .description("打开当前工程，自动启动或复用共享服务")
+  .option("--port <number>", "共享服务首选端口；占用自动换端口", "4317")
+  .action(async (o) =>
+    out(
+      await openProject(directory(), {
+        port: portNumber(o.port),
+        migrate: true,
+      }),
+    ),
+  );
+cli
+  .command("stop")
+  .description("仅关闭当前工程；停止全部工程请用 server stop")
+  .action(async () => out(await stopProject(directory())));
 cli
   .command("restart")
-  .option("--port <number>", "首选端口")
+  .description("重新打开当前工程，不重启其他工程")
+  .option("--port <number>", "共享服务未运行时的首选端口", "4317")
   .action(async (o) => {
-    let port = o.port;
-    if (port === undefined)
-      try {
-        port = new URL(endpoint().url).port;
-      } catch {
-        port = "4317";
-      }
-    const requestedPort = portNumber(port);
-    await stop();
-    out(await start(requestedPort));
+    const port = portNumber(o.port);
+    await stopProject(directory());
+    out(await openProject(directory(), { port, migrate: true }));
   });
 cli.command("status").action(async () => {
-  const h = await health();
+  const health = await projectHealth(directory());
   out(
-    h
-      ? { ...h, url: endpoint().url }
-      : { ok: false, code: "SERVER_NOT_RUNNING", project: directory() },
+    health || {
+      ok: false,
+      code: "PROJECT_NOT_OPEN",
+      project: directory(),
+      serverRunning: !!(await serverHealth()),
+    },
   );
-  if (!h) process.exitCode = 1;
+  if (!health) process.exitCode = 1;
 });
+cli
+  .command("projects")
+  .description("列出共享服务中已打开的工程")
+  .action(async () => out(await listProjects()));
+const server = cli.command("server").description("管理全部工程共用的后台服务");
+server.command("status").action(async () => {
+  const health = await serverHealth();
+  out(health || { ok: false, code: "SERVER_NOT_RUNNING" });
+  if (!health) process.exitCode = 1;
+});
+server
+  .command("start")
+  .option("--port <number>", "首选端口；占用自动换端口", "4317")
+  .action(async (o) => out(await startServer(portNumber(o.port))));
+server
+  .command("stop")
+  .description("停止共享服务及全部已打开工程，保留所有文件")
+  .action(async () => out(await stopServer()));
+server
+  .command("restart")
+  .description("重启共享服务，恢复之前打开的工程")
+  .option("--port <number>", "首选端口，默认沿用当前端口")
+  .action(async (o) => {
+    const health = await serverHealth();
+    const port = portNumber(
+      o.port ?? (health ? new URL(health.url).port : "4317"),
+    );
+    await stopServer();
+    out(await startServer(port));
+  });
 cli
   .command("inspect")
   .option("--node <id>", "只查询某节点、输入和真实文件路径")
@@ -518,16 +479,28 @@ cli
   .command("history")
   .option("--limit <number>", "条目数", "20")
   .option("--offset <number>", "偏移", "0")
-  .action(async (o) =>
-    out(
-      await api(
-        "/api/history?limit=" +
-          encodeURIComponent(o.limit) +
-          "&offset=" +
-          encodeURIComponent(o.offset),
-      ),
-    ),
-  );
+  .action(async (o) => {
+    if (!(await projectHealth(directory()))) {
+      if (!existsSync(path.join(directory(), "canvas.sqlite")))
+        throw fail("工程不存在，请先 init 或 start", "PROJECT_NOT_FOUND");
+      const store = new Store(directory());
+      try {
+        out(
+          store.history({ limit: Number(o.limit), offset: Number(o.offset) }),
+        );
+      } finally {
+        store.close();
+      }
+    } else
+      out(
+        await api(
+          "/api/history?limit=" +
+            encodeURIComponent(o.limit) +
+            "&offset=" +
+            encodeURIComponent(o.offset),
+        ),
+      );
+  });
 for (const action of ["undo", "redo"])
   cli.command(action).action(async () => {
     const s = await api("/api/state");

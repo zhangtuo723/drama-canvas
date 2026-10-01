@@ -1,75 +1,121 @@
 # 幕间 · Drama Canvas
 
-由 Codex 通过 CLI 管理的本地图片、视频画布。画布展示媒体及其生成依赖，工程、原图、视频和提示词保存在工作目录；生成模型由 Codex 的其他工具调用。
+**使用 Codex 辅助创作短剧的本地画布插件。**
 
-## 启动
+在 Codex 中用自然语言描述创作需求，逐步制作角色设定图、场景参考、分镜图片和视频素材。Codex 调用可用的生成工具完成创作，再通过 Drama Canvas CLI 将结果放到画布上，并连接它们所使用的参考素材。
 
-需要 Node.js 22.12+。
+![使用 Codex 辅助创作短剧：左侧对话生成素材，右侧画布展示角色、场景、分镜和依赖连线](https://raw.githubusercontent.com/zhangtuo723/drama-canvas/main/docs/images/codex-short-drama-canvas.png)
+
+*在 Codex 中对话创作，右侧画布同步展示角色、咖啡店场景、多视角参考和分镜素材；连线表示素材之间的生成依赖。*
+
+## 在 Codex 中创作短剧
+
+在 Codex 中安装 Drama Canvas 插件后，直接描述你的短剧创作需求。首次使用时，Codex 会按插件指引检查 CLI，缺失或版本过旧时安装或升级，并启动画布。例如：
+
+> 为这部咖啡店短剧创建一个画布，先生成男女主角的角色设定图。
+>
+> 生成咖啡店俯视图，再以它为参考，生成前后左右四个角度的场景图。
+>
+> 使用这些角色和场景参考生成一组分镜，把结果放入画布，并连接对应的输入素材。
+
+Codex 负责调用生成工具和操作 CLI；画布用于查看图片、播放视频、缩放浏览，也支持移动和删除节点。工程、原图、视频和提示词保存在本地工作目录。CLI 本身不调用生成模型，图片和视频的生成能力取决于 Codex 当前可用的工具。
+
+## 安装与使用
+
+插件的安装方式见 [安装 Codex 插件](docs/PUBLISHING.md#通过-github-安装-codex-插件)。插件提供 Codex 操作画布的指引，CLI 是实际执行操作的独立工具；安装或更新插件与安装或更新 CLI 是两件事。
+
+**CLI 是打包好的工具，安装后即可使用，无需手动构建前端。** 日常操作可以交给 Codex：它调用已安装的 CLI，添加素材时自动启动或复用共享服务。你不需要每次创建工程都执行安装、构建或启动命令。
+
+本机需要 Node.js 22.12+。从 npm 安装无需 Git，安装包包含 CLI 和构建好的画布前端。共享服务需要 CLI **0.3.0 或更高版本**；更新插件后仍需检查实际调用的 CLI 版本，旧版 CLI 要单独升级。
+
+<details>
+<summary>手动安装或升级 CLI（可选）</summary>
+
+从 npm 安装到用户目录，安装和升级使用同一条命令：
 
 ```bash
-npm install
-npm run build
-node src/cli.js --project ./demo start --port 4317
+npm install --prefix "$HOME/.local/share/drama-canvas-cli" drama-canvas@latest
+"$HOME/.local/share/drama-canvas-cli/node_modules/.bin/drama-canvas" --version
 ```
 
-`start` 在后台启动服务，端口被占用时自动选择空闲端口，返回实际 URL。默认只监听本机。前台运行可用 `serve`，或 `npm start`；Ctrl+C 停止前台服务。
+也可以安装为全局命令：
 
 ```bash
-node src/cli.js --project ./demo status
-node src/cli.js --project ./demo stop
-node src/cli.js --project ./demo restart
+npm install -g drama-canvas@latest
+drama-canvas --version
+drama-canvas --project ./我的画布 start
 ```
 
-后台日志在工程的 `.server.log`。`status` 返回服务状态，服务未启动时退出码非零。
+插件加载本身不会执行安装命令；Codex 在首次处理画布任务时按插件指引检查版本并安装或升级。媒体处理使用 `sharp`、FFprobe 和 SQLite 原生依赖，安装时会按平台处理依赖；缺少预编译包的平台可能需要编译环境。
 
-## 安装 CLI 与插件
-
-GitHub 源码、npm 发布、插件 marketplace 安装与官方目录提交见 [发布说明](https://github.com/zhangtuo723/drama-canvas/blob/main/docs/PUBLISHING.md)。
-
-无需先发布到 npm registry，用户或 agent 可以直接从 GitHub 安装（需要 Git 和 Node.js 22.12+）：
+**备选：从 GitHub 安装。** 这种方式还需要 Git，安装脚本会自动构建前端，无需额外运行 `npm run build`：
 
 ```bash
 npm install --prefix "$HOME/.local/share/drama-canvas-cli" 'git+https://github.com/zhangtuo723/drama-canvas.git#main'
 "$HOME/.local/share/drama-canvas-cli/node_modules/.bin/drama-canvas" --version
 ```
 
-安装时 `prepare` 自动构建画布前端。当前尚未发布到 npm registry，因此不要使用仅包名的 `npm install -g drama-canvas`。
+如果已经拿到打包好的 `.tgz` 文件，也可执行 `npm install -g ./drama-canvas-0.3.0.tgz`。
 
-也可以从源码制作本地安装包：
+</details>
+
+## CLI 命令参考
+
+以下命令通常由 Codex 执行，也可以在终端中手动使用。示例以 `drama-canvas --project ./demo` 指定工程；如果安装在上面的用户目录，将 `drama-canvas` 替换为 `"$HOME/.local/share/drama-canvas-cli/node_modules/.bin/drama-canvas"` 即可。
+
+### 服务与工程
+
+一个用户共用一个本地后台服务，多个工程使用同一端口，通过 `/p/<工程ID>/` 区分画布。数据库、原图和提示词仍保存在各自工程目录。`start` 自动启动或复用共享服务并打开当前工程，返回该工程的实际 URL；首次启动时首选端口被占用会自动选择空闲端口。服务默认只监听本机。
 
 ```bash
-npm run build
-npm pack
-npm install -g ./drama-canvas-0.2.1.tgz
-drama-canvas init ./我的画布
-drama-canvas --project ./我的画布 start
+# 打开画布，自动启动或复用共享服务
+drama-canvas --project ./demo start
+
+# 第二个工程复用同一后台进程和端口
+drama-canvas --project ./另一个工程 start
+
+# 查看当前工程及所有已打开工程
+drama-canvas --project ./demo status
+drama-canvas projects
+
+# 只关闭或重开 demo，其他工程继续运行
+drama-canvas --project ./demo stop
+drama-canvas --project ./demo restart
+
+# 管理共享后台服务；stop 会关闭所有工程的服务
+drama-canvas server status
+drama-canvas server stop
+drama-canvas server start
+drama-canvas server restart
 ```
 
-这是本地安装包，尚未发布 npm。媒体处理使用 `sharp` 和按平台安装的 FFprobe，SQLite 使用 `better-sqlite3`；缺少相应预编译包的平台可能需要编译环境。
+添加节点、导入媒体等写操作以及 `view` 命令也会按需启动共享服务并打开目标工程，无需每次先执行 `start`。`inspect`、`node get` 和 `history` 在服务停止时直接读取本地工程，不会仅为查看数据而启动服务。
 
-插件目录为 `plugin/`，Skill 位于 `plugin/skills/drama-canvas/SKILL.md`。插件加载本身不会运行安装命令；agent 在首次执行画布任务时会检查 CLI，缺失时按 Skill 中的 GitHub 安装步骤处理。也可以使用当前源码仓库的 `node src/cli.js`。
+`status` 检查当前工程是否已打开，未打开时返回 `PROJECT_NOT_OPEN`，并通过 `serverRunning` 说明共享服务是否运行；`server status` 检查共享服务，未运行时返回 `SERVER_NOT_RUNNING`。这两种未运行状态均使用非零退出码。`projects` 列出已打开工程的路径、URL 等信息。工程的 `stop` 会释放该工程的数据库和页面连接，保留全部工程文件，并从待恢复列表中移除它；后续写操作或 `start` 可以再次打开。即使所有工程都关闭，共享进程也会保留，暂未启用空闲自动退出。
 
-以下示例都以 `node src/cli.js --project ./demo` 指定工程；全局安装后可以替换为 `drama-canvas --project ./demo`。
+`server stop` 停止整个共享服务；已打开工程的列表保存在本机，下次 `server start` 或 `server restart` 会恢复它们。关闭 Codex 或浏览器标签页不会停止后台服务。前台运行可用 `drama-canvas --project ./demo serve`；此时 Ctrl+C 关闭整个共享服务及其所有工程连接。
+
+共享服务的日志、访问令牌和已打开工程列表保存在 `~/.local/state/drama-canvas/`。可用绝对路径环境变量 `DRAMA_CANVAS_RUNTIME_DIR` 隔离测试或另一套服务；同一套服务的后续命令须使用相同变量。工程迁移到共享服务后，请使用 `start` 返回的新 URL。`start` 和 `restart` 会识别该工程的旧版独立服务，通过认证接口正常关闭后迁移，不会终止占用端口的无关进程。
 
 ## 添加、查看与更新节点
 
 一条命令导入图片或视频并添加节点，自动分配 ID、识别媒体类型和比例、选择空白位置，返回创建的节点：
 
 ```bash
-node src/cli.js --project ./demo node add --file ./demo/generated/scene.png --title '草原'
-node src/cli.js --project ./demo node add --id result-01 --type image --title '生成结果'
-node src/cli.js --project ./demo node update result-01 --file ./demo/generated/result.png
-node src/cli.js --project ./demo node update result-01 --x 800 --y 200 --width 640 --height 467
-node src/cli.js --project ./demo node delete result-01
+drama-canvas --project ./demo node add --file ./demo/generated/scene.png --title '草原'
+drama-canvas --project ./demo node add --id result-01 --type image --title '生成结果'
+drama-canvas --project ./demo node update result-01 --file ./demo/generated/result.png
+drama-canvas --project ./demo node update result-01 --x 800 --y 200 --width 640 --height 467
+drama-canvas --project ./demo node delete result-01
 ```
 
 `node add` 也支持 `--asset <素材ID>`、手动位置和尺寸。指定同名 ID 默认报错；只有明确使用 `--replace` 才完整替换旧节点。普通编辑使用 `node update`，保留未修改字段。删除节点会清理相关连线，保留媒体文件。
 
 ```bash
-node src/cli.js --project ./demo inspect --summary
-node src/cli.js --project ./demo inspect --type image --limit 20 --offset 0
-node src/cli.js --project ./demo node get image-1
-node src/cli.js --project ./demo inspect --node image-1
+drama-canvas --project ./demo inspect --summary
+drama-canvas --project ./demo inspect --type image --limit 20 --offset 0
+drama-canvas --project ./demo node get image-1
+drama-canvas --project ./demo inspect --node image-1
 ```
 
 `node get` 与 `inspect --node` 返回目标节点、当前输入、下游 ID、素材绝对路径，以及生成时记录的输入版本。`inspect` 不带筛选时返回全部节点、依赖线、素材和 revision；服务停止后仍可读取本地工程。
@@ -81,8 +127,8 @@ node src/cli.js --project ./demo inspect --node image-1
 仅支持图片、视频节点。箭头从输入素材指向结果，没有“下一步”等标签。输入去重，并禁止自依赖与循环依赖。
 
 ```bash
-node src/cli.js --project ./demo node inputs result-01 image-1 image-2
-node src/cli.js --project ./demo edge add --from image-4 --to result-01
+drama-canvas --project ./demo node inputs result-01 image-1 image-2
+drama-canvas --project ./demo edge add --from image-4 --to result-01
 ```
 
 `node inputs` 替换全部输入，不传来源 ID 则清空；`edge add` 追加单条依赖。新建节点也可以使用 `--inputs image-1 image-2`。
@@ -90,16 +136,16 @@ node src/cli.js --project ./demo edge add --from image-4 --to result-01
 生成前先设置依赖，将提示词保存到工程目录，再记录任务：
 
 ```bash
-node src/cli.js --project ./demo generation start result-01 --tool image_gen --prompt-file ./demo/generated/result.prompt.txt
-node src/cli.js --project ./demo node get result-01
+drama-canvas --project ./demo generation start result-01 --tool image_gen --prompt-file ./demo/generated/result.prompt.txt
+drama-canvas --project ./demo node get result-01
 ```
 
 保存 `start` 返回的 `node.data.generation.id`。Codex 读取 `generationInputs` 文件路径，交给实际可用的生成工具。生成得到真实文件后完成任务；下例的 `实际任务ID` 必须替换为本次 start 返回的 ID：
 
 ```bash
-node src/cli.js --project ./demo generation complete result-01 --generation-id 实际任务ID --file ./demo/generated/result.png
+drama-canvas --project ./demo generation complete result-01 --generation-id 实际任务ID --file ./demo/generated/result.png
 # 仅在生成失败时执行这一条：
-node src/cli.js --project ./demo generation fail result-01 --generation-id 实际任务ID --error '生成工具返回的实际失败原因'
+drama-canvas --project ./demo generation fail result-01 --generation-id 实际任务ID --error '生成工具返回的实际失败原因'
 ```
 
 任务 ID 防止较早的异步任务误写入后来启动的任务。记录包含提示词、工具名、开始/结束时间、输入节点及素材版本和输出素材。`start` 只记录“生成中”，不会调用模型；`complete` 导入真实输出，`fail` 记录失败。输入节点缺少素材、生成中、失败或已过期时，不能作为新任务的输入。`node update --file` 会直接完成该节点当前进行中的任务，异步生成推荐使用带任务 ID 的 `generation complete`。
@@ -107,7 +153,7 @@ node src/cli.js --project ./demo generation fail result-01 --generation-id 实�
 若已有真实结果，并且可以确认它使用的就是当前输入版本，可补记：
 
 ```bash
-node src/cli.js --project ./demo generation record result-01 --tool image_gen --prompt-file ./demo/generated/result.prompt.txt
+drama-canvas --project ./demo generation record result-01 --tool image_gen --prompt-file ./demo/generated/result.prompt.txt
 ```
 
 `record` 使用当前时间和当前输入版本，不用于推测历史来源。旧工程没有生成记录的结果会保留“生成出处未知”，不会伪造当时的提示词或输入版本。
@@ -117,10 +163,10 @@ node src/cli.js --project ./demo generation record result-01 --tool image_gen --
 ## 排列与定位
 
 ```bash
-node src/cli.js --project ./demo layout wedding-1 wedding-2 wedding-3 --mode grid --columns 3
-node src/cli.js --project ./demo layout image-1 image-2 result-01 --mode dependencies
-node src/cli.js --project ./demo view focus result-01
-node src/cli.js --project ./demo view fit
+drama-canvas --project ./demo layout wedding-1 wedding-2 wedding-3 --mode grid --columns 3
+drama-canvas --project ./demo layout image-1 image-2 result-01 --mode dependencies
+drama-canvas --project ./demo view focus result-01
+drama-canvas --project ./demo view fit
 ```
 
 `layout` 必须提供节点 ID，或明确加 `--all` 才排列整个画布；支持 `--gap`、`--x`、`--y`。网格排列适合成组图片，`dependencies` 按输入到输出排列。只移动指定节点，未选节点不受影响，但请为整组内容选择足够的空白区域。
@@ -130,10 +176,10 @@ node src/cli.js --project ./demo view fit
 ## 撤销、重做与恢复
 
 ```bash
-node src/cli.js --project ./demo history --limit 20
-node src/cli.js --project ./demo undo
-node src/cli.js --project ./demo redo
-node src/cli.js --project ./demo restore 12
+drama-canvas --project ./demo history --limit 20
+drama-canvas --project ./demo undo
+drama-canvas --project ./demo redo
+drama-canvas --project ./demo restore 12
 ```
 
 `restore` 的参数是 `history` 返回的历史条目 ID，不是 revision。最多保留 100 个画布快照，包含节点、布局、依赖和生成记录。撤销后再编辑会建立新分支并清除后续重做记录；恢复旧快照也会产生新的画布版本。删除节点、撤销和历史裁剪都不删除原始媒体文件。历史只从此次升级后开始记录，不能还原升级前未保存的操作。
@@ -141,9 +187,9 @@ node src/cli.js --project ./demo restore 12
 ## 媒体导入与旧素材优化
 
 ```bash
-node src/cli.js --project ./demo asset import ./demo/generated/scene.png
-node src/cli.js --project ./demo asset optimize
-node src/cli.js --project ./demo asset optimize asset_素材ID
+drama-canvas --project ./demo asset import ./demo/generated/scene.png
+drama-canvas --project ./demo asset optimize
+drama-canvas --project ./demo asset optimize asset_素材ID
 ```
 
 导入支持 PNG/JPG/WebP/GIF/AVIF/MP4/WebM/MOV，检查实际格式、解码有效性和扩展名。原文件通过流式复制进入 `assets/`，按内容去重且不覆盖已有原图。图片记录尺寸与方向，生成最大 480px 的 WebP 缩略图；视频记录尺寸和时长。图像最多 1 亿像素，视频解码校验最多 120 秒。视频在画布中的播放能力仍取决于浏览器编码支持。
@@ -161,11 +207,27 @@ node src/cli.js --project ./demo asset optimize asset_素材ID
 
 ## 工作目录与批量操作
 
-工程目录包含 `canvas.sqlite`、`assets/`、`thumbnails/`。生成源文件与提示词也应保存在工作目录，例如 `generated/`。`.server.json`、`.server.lock`、`.server.log` 是本机服务运行文件；不要把本地访问令牌加入版本控制。完整备份时先停止服务，再复制整个工程目录，避免遗漏 SQLite WAL 中的数据。
+工程目录包含 `canvas.sqlite`、`assets/`、`thumbnails/`。生成源文件与提示词也应保存在工作目录，例如 `generated/`。共享服务的 `server.json`、`server.lock`、`server.log` 和 `projects.json` 位于用户级 `~/.local/state/drama-canvas/`，无需随工程分发。每个已打开工程仍会写入自己的 `.server.json` 和 `.server.lock`，用于身份识别并防止旧版服务同时打开该工程；工程中的 `.server.log` 可能是旧版遗留日志。共享运行文件及工程运行文件都不应提交版本控制，尤其不要公开其中的访问令牌。完整备份时先用 `--project <目录> stop` 关闭目标工程，再复制整个工程目录，避免遗漏 SQLite WAL 中的数据；其他工程可继续使用。
 
 `apply --file operations.json` 提交一个原子批次。优先使用 `node.create` 新建、`node.patch` 局部更新；`node.put` 是显式完整替换，需要保留所有未打算清除的字段。批次包含读取到的 `revision` 和唯一 `requestId`；冲突后重新读取并协调，结果未知的重试使用同一请求 ID 和相同内容。最近 500 条请求保存幂等记录，同一 ID 不能用于不同操作。完整示例见插件 Skill。
 
+## 源码开发
+
+修改 CLI 或画布前端时，在源码仓库目录中执行：
+
 ```bash
-npm run build
-npm test
+npm install
+node src/cli.js --project ./demo start
 ```
+
+`npm install` 的 `prepare` 脚本会自动构建前端。后续修改前端代码后再执行 `npm run build`；这属于源码开发流程，普通插件用户无需操作。
+
+```bash
+# 运行测试
+npm test
+
+# 制作包含 CLI 和前端的安装包，打包时自动构建
+npm pack
+```
+
+CLI 与插件的发布和更新方式见 [发布说明](docs/PUBLISHING.md)。

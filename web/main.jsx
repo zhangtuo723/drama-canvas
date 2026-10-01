@@ -25,6 +25,7 @@ import {
   commitHistory,
   commitOperations,
   imageSource,
+  openCanvasEvents,
   requestJson,
 } from "./canvas-client.js";
 
@@ -261,17 +262,38 @@ function App() {
   );
   useEffect(() => {
     mounted.current = true;
+    let projectClosed = false;
+    const closeProject = () => {
+      projectClosed = true;
+      events.close();
+      if (mounted.current) {
+        setStatus("工程已关闭");
+        setError("此工程已关闭。请通过 CLI 重新打开工程后刷新页面。");
+      }
+    };
     const read = () =>
       refresh().catch((e) => {
+        if (["PROJECT_NOT_OPEN", "PROJECT_CLOSED"].includes(e.code)) {
+          closeProject();
+          return;
+        }
         if (mounted.current) setError(e.message);
       });
-    const events = new EventSource("/api/events");
+    const events = openCanvasEvents();
     events.onmessage = read;
     events.onopen = () => {
+      if (projectClosed) return;
       setStatus("已同步");
       read();
     };
-    events.onerror = () => setStatus("正在重连");
+    events.onerror = () => {
+      if (projectClosed) return;
+      setStatus("正在重连");
+      // A disconnected stream may mean only this project was closed while the
+      // shared service is still running. Check it without switching projects.
+      read();
+    };
+    events.addEventListener("project-closed", closeProject);
     events.addEventListener("view", (event) => {
       try {
         followView(JSON.parse(event.data)).catch((e) => {

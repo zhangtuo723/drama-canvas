@@ -12,18 +12,22 @@ if (!cli)
   );
 const exec = promisify(execFile);
 const dir = await mkdtemp(path.join(os.tmpdir(), "drama-installed-smoke-"));
+const project = path.join(dir, "project");
+const env = {
+  ...process.env,
+  DRAMA_CANVAS_RUNTIME_DIR: path.join(dir, "runtime"),
+};
 const run = async (...args) =>
   JSON.parse(
     (
-      await exec(process.execPath, [cli, "--project", dir, ...args], {
+      await exec(process.execPath, [cli, "--project", project, ...args], {
         timeout: 20000,
+        env,
       })
     ).stdout,
   );
-let started = false;
 try {
   const service = await run("start", "--port", "0");
-  started = true;
   const result = await run(
     "node",
     "add",
@@ -37,7 +41,7 @@ try {
   assert.equal(page.status, 200, "Installed viewer must serve HTML");
   const script = (await page.text()).match(/src="([^"]+\.js)"/)?.[1];
   assert.ok(script, "Installed package must include built viewer JS");
-  const response = await fetch(service.url + script, {
+  const response = await fetch(new URL(script, page.url), {
     signal: AbortSignal.timeout(5000),
   });
   assert.equal(response.status, 200);
@@ -47,6 +51,8 @@ try {
     "Installed CLI, SQLite writes, background service, and viewer assets passed.",
   );
 } finally {
-  if (started) await run("stop");
+  // Always clean up this isolated daemon, even if opening the project failed.
+  // Keep its runtime files for diagnosis if shutdown itself fails.
+  await run("server", "stop");
   await rm(dir, { recursive: true, force: true });
 }
