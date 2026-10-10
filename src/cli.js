@@ -47,8 +47,9 @@ async function api(
 ) {
   return request(projectEndpoint(directory()), route, body, timeout);
 }
-// Read-only inspection stays available offline. Only commands that need the
-// running canvas open it automatically; status/stop never wake a service.
+// Persistent-state inspection stays available offline; live browser selection
+// never falls back to disk. Only commands that need the running canvas open it
+// automatically; selection/status/stop never wake a service.
 cli.hook("preAction", async (_, command) => {
   let top = command;
   while (top.parent && top.parent !== cli) top = top.parent;
@@ -105,6 +106,35 @@ async function state(query = {}) {
     )
       return localState(query);
     throw e;
+  }
+}
+// Selection belongs to a live browser session, not to a stored canvas snapshot.
+// Verify identity first so a stale endpoint cannot expose another project.
+async function liveSelection(route) {
+  if (!(await projectHealth(directory())))
+    throw fail(
+      "当前工程未运行或服务身份不匹配；运行 start，打开返回的工程 URL 并选中节点后重试。selection 不会自动启动服务或读取离线选择。",
+      "PROJECT_NOT_OPEN",
+    );
+  try {
+    return await api(route);
+  } catch (error) {
+    const hints = {
+      SELECTION_UNAVAILABLE: "请打开当前工程的画布，在浏览器中选中节点后重试。",
+      SELECTION_AMBIGUOUS:
+        "运行 selection sessions 查看标签页，请用户确认目标标签页，再使用 selection get --session <id>；不要猜测。",
+      SELECTION_EXPIRED:
+        "请返回目标画布标签页重新选中节点，再读取 selection get；不要复用过期节点 ID。",
+      SELECTION_SESSION_NOT_FOUND:
+        "运行 selection sessions 查看当前标签页，并确认正确的 session ID 后重试。",
+      SELECTION_STALE:
+        "请等待目标画布同步，再重新选择并读取；不要使用之前的选择。",
+      SELECTION_EMPTY: "请在目标画布标签页选中一个或多个节点后重试。",
+      SELECTION_NODE_DELETED:
+        "所选节点已删除；请在目标画布标签页重新选择后读取，不要使用旧节点 ID。",
+    };
+    if (hints[error.code]) error.message += " " + hints[error.code];
+    throw error;
   }
 }
 async function apply(operations, revision) {
@@ -273,6 +303,24 @@ asset
     out(response);
     if (response.failed.length) process.exitCode = 1;
   });
+const selection = cli
+  .command("selection")
+  .description("读取当前工程的实时浏览器选择，不启动服务且不回退到离线数据");
+selection
+  .command("get")
+  .description("读取所选节点的当前详情；多标签页时必须指定 session")
+  .option("--session <id>", "明确指定浏览器标签页 session ID")
+  .action(async (o) => {
+    const query =
+      o.session === undefined
+        ? ""
+        : "?" + new URLSearchParams({ session: o.session });
+    out(await liveSelection("/api/selection" + query));
+  });
+selection
+  .command("sessions")
+  .description("列出当前工程的浏览器选择会话及 active/expired 状态")
+  .action(async () => out(await liveSelection("/api/selection/sessions")));
 const node = cli.command("node");
 node.command("get <id>").action(async (id) => out(await state({ node: id })));
 node

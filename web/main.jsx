@@ -29,6 +29,11 @@ import {
   requestJson,
 } from "./canvas-client.js";
 
+import {
+  createSelectionPublisher,
+  selectionReference,
+} from "./selection-client.js";
+
 function MediaImage({ asset, title, width, height }) {
   const preferredSource = useStore(
     useCallback(
@@ -169,6 +174,76 @@ function App() {
   const pendingMoves = useRef(new Map());
   const pendingDeletes = useRef(new Set());
   const viewSequence = useRef(0);
+  const [selectionPublisher] = useState(() => createSelectionPublisher());
+  const [selectionStatus, setSelectionStatus] = useState("");
+  const selectedIds = nodes
+    .filter((node) => node.selected)
+    .map((node) => node.id)
+    .sort();
+  const selectionKey = JSON.stringify(selectedIds);
+  const selectionSnapshot = useRef(null);
+  selectionSnapshot.current = { ids: selectedIds, revision: state.revision };
+  const publishSelection = useCallback(
+    async (options) => {
+      const snapshot = selectionSnapshot.current;
+      if (!Number.isSafeInteger(snapshot.revision)) return;
+      return selectionPublisher.publish(
+        snapshot.ids,
+        snapshot.revision,
+        options,
+      );
+    },
+    [selectionPublisher],
+  );
+  useEffect(() => {
+    if (status !== "已同步" || !Number.isSafeInteger(state.revision)) return;
+    let current = true;
+    setSelectionStatus("选择同步中");
+    const publish = () =>
+      publishSelection()
+        .then(() => {
+          if (current)
+            setSelectionStatus(
+              selectedIds.length ? `已选 ${selectedIds.length} 个` : "",
+            );
+        })
+        .catch((e) => {
+          if (current) setSelectionStatus("选择未同步：" + e.message);
+        });
+    publish();
+    const timer = setInterval(publish, 15000);
+    return () => {
+      current = false;
+      clearInterval(timer);
+    };
+  }, [selectionKey, state.revision, status, publishSelection]);
+  useEffect(() => {
+    const close = () => {
+      publishSelection({ closed: true, keepalive: true }).catch(() => {});
+    };
+    const resume = () => {
+      publishSelection().catch(() => {});
+    };
+    window.addEventListener("pagehide", close);
+    window.addEventListener("pageshow", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("pagehide", close);
+      window.removeEventListener("pageshow", resume);
+      document.removeEventListener("visibilitychange", resume);
+      close();
+    };
+  }, [publishSelection]);
+  const copySelection = async () => {
+    try {
+      const published = await publishSelection();
+      if (!published?.selectedIds.length) throw new Error("请先选择节点");
+      await navigator.clipboard.writeText(selectionReference(published));
+      setSelectionStatus("选择引用已复制");
+    } catch (e) {
+      setSelectionStatus("复制失败：" + e.message);
+    }
+  };
   const showState = useCallback((data) => {
     confirmed.current = data;
     revision.current = data.revision;
@@ -514,6 +589,16 @@ function App() {
       )}
       <div className="view-tools">
         <span>{nodes.length} 个节点</span>
+        <span role="status" className="selection-status">
+          {selectionStatus}
+        </span>
+        <button
+          disabled={!selectedIds.length || status !== "已同步"}
+          onClick={copySelection}
+          title={`标签页 ${selectionPublisher.sessionId}；复制给 Codex 可明确指定当前选择`}
+        >
+          复制选择引用
+        </button>
         <button onClick={() => flow.fitView({ padding: 0.2, duration: 300 })}>
           查看全部 ↗
         </button>

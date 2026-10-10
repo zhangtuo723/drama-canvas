@@ -279,3 +279,14 @@ header strong {
   user-select: none;
   -webkit-user-drag: none;
 }
+
+.selection-status {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.view-tools button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

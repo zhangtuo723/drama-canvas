@@ -122,6 +122,31 @@ drama-canvas --project ./demo inspect --node image-1
 
 所有命令默认输出 JSON。画布写操作默认只返回成功状态、revision 和本次相关信息；需要完整画布状态时加全局 `--full`。错误包含 `error`、`code` 并以非零状态退出。默认请求超时为 150000 毫秒，可用全局 `--timeout <毫秒>` 调整。
 
+## 读取浏览器当前选择
+
+在画布中选中一个或多个节点后，可以对 Codex 说“修改这个”或“使用选中的素材生成”。Codex 应先读取当前工程的实时选择，不按节点顺序、标题相似度或上一次选择猜测目标：
+
+```bash
+drama-canvas --project ./demo selection get
+# 有多个浏览器标签页时，先确认用户指的是哪一个
+drama-canvas --project ./demo selection sessions
+drama-canvas --project ./demo selection get --session <sessionId>
+```
+
+`selection get` 返回工程路径、`projectId`、当前 `revision`、`sessionId`、`selectedIds`、`updatedAt`、`expiresAt` 和 `nodes`。`nodes` 中每项与 `node get` 一样，包含节点详情、当前素材绝对路径、当前输入、下游 ID 与 `generationInputs`；应据此检查当前素材、生成状态与输入版本后再操作。`selection sessions` 返回本工程的会话列表，以及各自选中 ID、更新时间、过期时间和 `active`/`expired` 状态。
+
+页面右下角的“复制选择引用”会复制工程、标签页、节点 ID 和时间信息，可粘贴给 Codex 来明确指定标签页。Codex 仍须用该工程与 `--session` 重新读取，并核对节点 ID；若实时选择与引用不同，应先确认目标，不能悄悄换成新的选择。
+
+页面每 15 秒续期，最后一次成功同步 60 秒后会话过期；关闭页面会尽力立即失效，浏览器崩溃、休眠或网络中断时由超时兜底。时间字段为 Unix 毫秒。`observedRevision` 是页面上报版本，`revision` 和节点详情来自读取时的最新工程版本。选择是短期、按浏览器标签页隔离的会话信息，不写入画布数据库或撤销历史。CLI 读取前核对工程身份；这些命令不会自动启动服务，也没有离线回退。服务未运行时，先显式 `start`，打开返回的工程 URL，再在浏览器中选中节点。
+
+- `SELECTION_AMBIGUOUS`：有多个活跃标签页，即使其中某个没有选中节点也不能自动选另一个。列出会话，让用户确认后指定 `--session`。
+- `SELECTION_UNAVAILABLE`、`SELECTION_EMPTY`：没有可用会话或未选中节点，请用户打开正确画布并选择。
+- `SELECTION_EXPIRED`、`SELECTION_SESSION_NOT_FOUND`：会话过期或不存在，请返回目标标签页重新选择，再读取实时结果。
+- `SELECTION_STALE`：页面版本落后，选择尚未同步；等待画布同步后重新选择，不会回退到之前的选择。
+- `SELECTION_NODE_DELETED`：选择引用的节点已删除，请重新选择。不要静默忽略缺失节点或复用之前读到的 ID。
+
+服务重启或工程关闭后，必须重新建立浏览器会话；不要把旧的会话 ID 或选择结果作为下一次“这个”的依据。选择本身不代表用户授权修改或生成，后续动作仍以用户请求为准。
+
 ## 生成依赖与任务记录
 
 仅支持图片、视频节点。箭头从输入素材指向结果，没有“下一步”等标签。输入去重，并禁止自依赖与循环依赖。
