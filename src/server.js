@@ -14,6 +14,7 @@ import {
 } from "./runtime.js";
 import { Store } from "./store.js";
 import { queryState } from "./queries.js";
+import { SelectionRegistry } from "./selection.js";
 const fail = (message, code, status = 409) =>
   Object.assign(new Error(message), { code, status });
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -45,6 +46,7 @@ export function createApp(dir, { prefix = "", health = {} } = {}) {
     app = express(),
     clients = new Set(),
     token = randomBytes(24).toString("hex");
+  const selection = new SelectionRegistry(store);
   let pending = 0,
     closed = false;
   const drainWaiters = new Set();
@@ -82,6 +84,15 @@ export function createApp(dir, { prefix = "", health = {} } = {}) {
   app.use(express.json({ limit: "4mb" }));
   app.get("/api/session", (_, res) =>
     res.set("Cache-Control", "no-store").json({ token }),
+  );
+  app.get("/api/selection/sessions", (_, res) =>
+    res.set("Cache-Control", "no-store").json(selection.list()),
+  );
+  app.get("/api/selection", (req, res) =>
+    res.set("Cache-Control", "no-store").json(selection.get(req.query.session)),
+  );
+  app.post("/api/selection", (req, res) =>
+    res.json(selection.update(req.body)),
   );
   app.get("/api/state", (req, res) =>
     res.json(queryState(store.get(), store.assets(), store.dir, req.query)),
