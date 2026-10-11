@@ -256,7 +256,8 @@ header strong {
   opacity: 0.35;
   cursor: default;
 }
-.node-delete {
+.node-delete,
+.node-reload {
   flex: 0 0 26px;
   width: 26px;
   height: 26px;
@@ -267,6 +268,10 @@ header strong {
   color: #899181;
   font-size: 21px;
   line-height: 1;
+}
+.node-reload:hover {
+  color: #56684b;
+  background: #edf3e8;
 }
 .node-delete:hover {
   color: #a04d3b;

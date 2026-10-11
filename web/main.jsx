@@ -69,6 +69,7 @@ function MediaImage({ asset, title, width, height }) {
 
 function MediaNode({ id, data, type, width, height }) {
   const { deleteElements } = useReactFlow();
+  const [videoReloadCount, setVideoReloadCount] = useState(0);
   const badges = [];
   if (data.status === "running") badges.push(["running", "生成中"]);
   else if (data.status === "failed") badges.push(["failed", "失败"]);
@@ -106,6 +107,20 @@ function MediaNode({ id, data, type, width, height }) {
             {label}
           </small>
         ))}
+        {type === "video" && data.asset && (
+          <button
+            className="node-reload nodrag nopan"
+            type="button"
+            aria-label={`重新加载视频 ${data.title}`}
+            title="重新加载视频"
+            onClick={(event) => {
+              event.stopPropagation();
+              setVideoReloadCount((count) => count + 1);
+            }}
+          >
+            ↻
+          </button>
+        )}
         <button
           className="node-delete nodrag nopan"
           type="button"
@@ -136,6 +151,7 @@ function MediaNode({ id, data, type, width, height }) {
       {type === "video" &&
         (data.asset ? (
           <video
+            key={`${data.asset.id}:${videoReloadCount}`}
             className="nodrag nopan nowheel"
             src={data.asset.url}
             controls
